@@ -379,7 +379,7 @@ When an email is received and classified, you'll see:
 EMAIL #1
 ================================================================================
 From: "Habibur Nobel" <habibur@example.com>
-To: nobel@memberlounge.app
+To: email_address
 Subject: read emails from this subject line
 Date: Wed Oct 15 2025 21:14:22 GMT+0600 (Bangladesh Standard Time)
 --------------------------------------------------------------------------------
@@ -847,7 +847,7 @@ This project is licensed under the MIT License - feel free to use it for persona
 
 **Habibur Nobel**
 
-- Email: nobel@memberlounge.app
+- Email: email_address
 - Built with ❤️ using NestJS, TypeScript, and OpenAI
 
 ---
