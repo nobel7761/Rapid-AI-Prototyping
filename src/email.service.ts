@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
+import { OpenAIService } from './openai.service';
 
 @Injectable()
 export class EmailService implements OnModuleInit, OnModuleDestroy {
@@ -15,6 +16,8 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
   private intervalId: NodeJS.Timeout | null = null;
   private processedEmails = new Set<string>(); // Track processed email UIDs
   public isMonitoring = false;
+
+  constructor(private readonly openaiService: OpenAIService) {}
 
   onModuleInit() {
     this.logger.log(
@@ -230,29 +233,162 @@ export class EmailService implements OnModuleInit, OnModuleDestroy {
 
                 stream.once('end', () => {
                   // Parse the email
-                  simpleParser(buffer, (err, parsed) => {
-                    if (err) {
-                      this.logger.error('Error parsing email:', err);
-                      return;
+                  simpleParser(buffer, async (err, parsed) => {
+                    try {
+                      console.log('\n🔴 DEBUG: Parser callback started!');
+
+                      if (err) {
+                        this.logger.error('Error parsing email:', err);
+                        return;
+                      }
+
+                      console.log('🔴 DEBUG: Email parsed successfully!');
+
+                      // Display email body (prefer text, fallback to html)
+                      const body =
+                        parsed.text || parsed.html || 'No content available';
+
+                      // Log email details to console
+                      console.log('\n' + '='.repeat(80));
+                      console.log(`EMAIL #${emailCount}`);
+                      console.log('='.repeat(80));
+                      console.log(`From: ${parsed.from?.text || 'Unknown'}`);
+                      console.log(`To: ${parsed.to?.text || 'Unknown'}`);
+                      console.log(`Subject: ${parsed.subject || 'No Subject'}`);
+                      console.log(`Date: ${parsed.date || 'Unknown Date'}`);
+                      console.log('-'.repeat(80));
+                      console.log('BODY:');
+                      console.log('-'.repeat(80));
+                      console.log(body);
+                      console.log('-'.repeat(80));
+
+                      console.log(
+                        '\n🔴 DEBUG: About to start classification...',
+                      );
+                      console.log(
+                        '🔴 DEBUG: OpenAI Service exists?',
+                        !!this.openaiService,
+                      );
+                      console.log(
+                        '🔴 DEBUG: OpenAI Service type:',
+                        typeof this.openaiService,
+                      );
+
+                      // Classify email using OpenAI
+                      try {
+                        console.log('\n' + '🔍'.repeat(40));
+                        console.log('🤖 STEP 1: Starting AI Analysis...');
+                        console.log(
+                          '📧 Email body length:',
+                          body.length,
+                          'characters',
+                        );
+                        console.log('⏳ Sending request to OpenAI...\n');
+
+                        const classification =
+                          await this.openaiService.classifyEmail({
+                            from: parsed.from?.text || 'Unknown',
+                            subject: parsed.subject || 'No Subject',
+                            body: body,
+                          });
+
+                        console.log('✅ STEP 2: OpenAI Response Received!\n');
+
+                        // BIG PROMINENT RESULT
+                        console.log('╔' + '═'.repeat(78) + '╗');
+                        console.log('║' + ' '.repeat(78) + '║');
+
+                        const isSystemGenerated =
+                          classification.classification === 'system-generated';
+                        const resultIcon = isSystemGenerated ? '🤖' : '👤';
+                        const resultText =
+                          classification.classification.toUpperCase();
+                        const resultLabel = isSystemGenerated
+                          ? 'SYSTEM-GENERATED EMAIL'
+                          : 'HUMAN-GENERATED EMAIL';
+
+                        // Center the text
+                        const padding = Math.floor(
+                          (78 - resultLabel.length - 2) / 2,
+                        );
+                        console.log(
+                          '║' +
+                            ' '.repeat(padding) +
+                            resultIcon +
+                            ' ' +
+                            resultLabel +
+                            ' '.repeat(78 - padding - resultLabel.length - 2) +
+                            '║',
+                        );
+                        console.log('║' + ' '.repeat(78) + '║');
+                        console.log('╚' + '═'.repeat(78) + '╝');
+
+                        console.log('\n📊 DETAILED CLASSIFICATION RESULTS:');
+                        console.log('-'.repeat(80));
+                        console.log(`   Type: ${resultText}`);
+                        console.log(
+                          `   Confidence: ${classification.confidence}% ${classification.confidence >= 80 ? '(High)' : classification.confidence >= 60 ? '(Medium)' : '(Low)'}`,
+                        );
+                        console.log(
+                          `\n   Reasoning: ${classification.reasoning}`,
+                        );
+
+                        if (
+                          classification.indicators.systemIndicators.length > 0
+                        ) {
+                          console.log(
+                            '\n🤖 System-Generated Indicators Found:',
+                          );
+                          classification.indicators.systemIndicators.forEach(
+                            (indicator, i) => {
+                              console.log(`   ${i + 1}. ${indicator}`);
+                            },
+                          );
+                        }
+
+                        if (
+                          classification.indicators.humanIndicators.length > 0
+                        ) {
+                          console.log('\n👤 Human-Generated Indicators Found:');
+                          classification.indicators.humanIndicators.forEach(
+                            (indicator, i) => {
+                              console.log(`   ${i + 1}. ${indicator}`);
+                            },
+                          );
+                        }
+
+                        console.log('\n✅ STEP 3: Classification Complete!\n');
+                        console.log('='.repeat(80) + '\n');
+                      } catch (classificationError) {
+                        console.log('\n❌ ERROR in AI Classification Process!');
+                        console.log('-'.repeat(80));
+                        console.log(
+                          '🔴 DEBUG: Error details:',
+                          classificationError,
+                        );
+                        this.logger.error(
+                          'Error classifying email:',
+                          (classificationError as Error).message,
+                        );
+                        this.logger.error(
+                          'Error stack:',
+                          (classificationError as Error).stack,
+                        );
+                        console.log(
+                          '💥 Email classification failed - see logs above for details',
+                        );
+                        console.log('='.repeat(80) + '\n');
+                      }
+                    } catch (outerError) {
+                      console.log(
+                        '\n❌❌❌ CRITICAL ERROR in email parser callback!',
+                      );
+                      console.log('Error:', outerError);
+                      this.logger.error(
+                        'Critical error in parser:',
+                        outerError,
+                      );
                     }
-
-                    // Log email details to console
-                    console.log('\n' + '='.repeat(80));
-                    console.log(`EMAIL #${emailCount}`);
-                    console.log('='.repeat(80));
-                    console.log(`From: ${parsed.from?.text || 'Unknown'}`);
-                    console.log(`To: ${parsed.to?.text || 'Unknown'}`);
-                    console.log(`Subject: ${parsed.subject || 'No Subject'}`);
-                    console.log(`Date: ${parsed.date || 'Unknown Date'}`);
-                    console.log('-'.repeat(80));
-                    console.log('BODY:');
-                    console.log('-'.repeat(80));
-
-                    // Display email body (prefer text, fallback to html)
-                    const body =
-                      parsed.text || parsed.html || 'No content available';
-                    console.log(body);
-                    console.log('='.repeat(80) + '\n');
                   });
                 });
               });
